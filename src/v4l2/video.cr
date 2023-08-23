@@ -117,7 +117,7 @@ class V4L2::Video
     self
   end
 
-  def raw_stream(timeout : Time::Span = 2.seconds, buffer_type : BufferType = BufferType::VIDEO_CAPTURE, & : (Pointer(Void), UInt32) ->)
+  def raw_stream(timeout : Time::Span = 2.seconds, buffer_type : BufferType = BufferType::VIDEO_CAPTURE, & : Bytes ->)
     buffers = @buffers
     raise "must allocate buffers" unless buffers
 
@@ -133,7 +133,9 @@ class V4L2::Video
         raise "failed to dequeue buffer (#{ret})"
       end
 
-      yield buffers[buffer.index], buffer.length
+      pointer = Pointer(UInt8).new(buffers[buffer.index].address)
+      slice = Slice.new(pointer, buffer.length)
+      yield slice
 
       ret = LibC.ioctl(@io.fd, VIDIOC_QBUF.to_u64, pointerof(buffer))
       if ret < 0

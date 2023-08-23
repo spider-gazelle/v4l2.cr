@@ -5,6 +5,12 @@ development_dependencies:
   ameba:
     github: veelenga/ameba
 
+  ffmpeg:
+    github: spider-gazelle/ffmpeg
+
+  stumpy_png:
+    github: stumpycr/stumpy_png
+
 authors:
   - Stephen von Takach <steve@place.tech>
 
