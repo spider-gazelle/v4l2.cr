@@ -29,7 +29,7 @@ module V4L2
 
       # setup the ffmpeg image format conversion
       v4l2_frame = FFmpeg::Frame.new(format.width, format.height, :yuyv422)
-      rgb_frame = FFmpeg::Frame.new(format.width, format.height, :rgb24)
+      rgb_frame = FFmpeg::Frame.new(format.width, format.height, :rgb48Le)
       convert = FFmpeg::SWScale.new(v4l2_frame, rgb_frame)
 
       spawn do
@@ -51,7 +51,10 @@ module V4L2
       (count > 0).should eq true
 
       # save the last frame using stumpy png
-      frame_buffer = rgb_frame.buffer
+      pixel_components = format.width * format.height * 3
+      pointer = Pointer(UInt16).new(rgb_frame.buffer.to_unsafe.address)
+      frame_buffer = Slice.new(pointer, pixel_components)
+
       canvas = StumpyCore::Canvas.new(format.width.to_i, format.height.to_i)
       canvas.pixels.size.times do |index|
         idx = index * 3
