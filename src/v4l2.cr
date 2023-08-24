@@ -28,6 +28,11 @@ module V4L2
     ioc(LibC::IOC_WRITE, type.ord.to_u32, nr.to_u32, size.to_u32)
   end
 
+  def self.ior(type : Char, nr : Int, size : Int)
+    ioc(LibC::IOC_READ, type.ord.to_u32, nr.to_u32, size.to_u32)
+  end
+
+  VIDIOC_QUERYCAP            = V4L2.ior('V', 0, sizeof(LibV4l2::Capability))
   VIDIOC_S_FMT               = V4L2.iorw('V', 5, sizeof(LibV4l2::Format))
   VIDIOC_ENUM_FMT            = V4L2.iorw('V', 2, sizeof(LibV4l2::Fmtdesc))
   VIDIOC_ENUM_FRAMESIZES     = V4L2.iorw('V', 74, sizeof(LibV4l2::Frmsizeenum))

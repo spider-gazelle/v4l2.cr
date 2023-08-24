@@ -18,6 +18,12 @@ module V4L2
       vid.buffer.index.should eq 0_u32
     end
 
+    it "gets the device name" do
+      vid = Video.new(Path["/dev/video0"])
+      details = vid.device_details
+      (details.name.size > 0).should be_true
+    end
+
     it "can stream and scale" do
       vid = Video.new(Path["/dev/video0"])
       pixels = vid.supported_formats
@@ -25,12 +31,13 @@ module V4L2
 
       # highest resolution + framerate combo
       format = pixels[1].frame_sizes[1].frame_rate
-      vid.set_format(format).request_buffers(2).allocate_mmap_buffers(2).start_stream
+      vid.set_format(format).request_buffers(1)
 
       # setup the ffmpeg image format conversion
-      v4l2_frame = FFmpeg::Frame.new(format.width, format.height, :yuyv422)
+      # v4l2_frame = FFmpeg::Frame.new(format.width, format.height, :yuyv422)
       rgb_frame = FFmpeg::Frame.new(format.width, format.height, :rgb48Le)
-      convert = FFmpeg::SWScale.new(v4l2_frame, rgb_frame)
+      # convert = FFmpeg::SWScale.new(v4l2_frame, rgb_frame)
+      convert = FFmpeg::SWScale.new(format.width, format.height, :yuyv422, output_format: :rgb48Le)
 
       spawn do
         sleep 3
@@ -38,13 +45,14 @@ module V4L2
       end
 
       count = 0
-      vid.raw_stream do |buffer|
+      vid.stream do |buffer|
         print '+'
         count += 1
 
         # process the frame using ffmpeg / libav
-        # TODO:: benchmark copy vs creating new frame using this buffer
-        buffer.copy_to v4l2_frame.buffer
+        # creating new frame using this buffer is faster than copying
+        # buffer.copy_to v4l2_frame.buffer
+        v4l2_frame = FFmpeg::Frame.new(format.width, format.height, :yuyv422, buffer: buffer)
         convert.scale(v4l2_frame, rgb_frame)
       end
 

@@ -1,7 +1,8 @@
 require "./frame_size"
 
 class V4L2::PixelFormat
-  def initialize(@io : IO::FileDescriptor, format : LibV4l2::Fmtdesc)
+  def initialize(@io : IO::FileDescriptor, @format : LibV4l2::Fmtdesc)
+    format = @format
     @id = format.pixelformat
     @code = PixelFormat.pixel_format_chars(format.pixelformat)
     @index = format.index

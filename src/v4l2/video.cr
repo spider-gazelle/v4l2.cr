@@ -37,6 +37,13 @@ class V4L2::Video
     formats
   end
 
+  def device_details
+    capability = LibV4l2::Capability.new
+    ret = LibC.ioctl(@io.fd, VIDIOC_QUERYCAP.to_u64, pointerof(capability))
+    raise RuntimeError.from_errno "failed to obtain device details (#{ret})" if ret < 0
+    DeviceDetails.new(capability)
+  end
+
   def set_format(format_id : UInt32, width : UInt32, height : UInt32, buffer_type : BufferType = BufferType::VIDEO_CAPTURE)
     fmt = LibV4l2::Format.new
     fmt.type = buffer_type.value
@@ -75,6 +82,12 @@ class V4L2::Video
     if ret < 0
       raise "failed to request buffers #{count}, #{buffer_type}, #{memory_type} (#{ret})"
     end
+
+    case memory_type
+    when .mmap?
+      allocate_mmap_buffers(count, buffer_type)
+    end
+
     self
   end
 
@@ -82,8 +95,6 @@ class V4L2::Video
     count : Int,
     buffer_type : BufferType = BufferType::VIDEO_CAPTURE
   )
-    raise ArgumentError.new("requires at least 2 buffers, requested #{count}") if count < 2
-
     length = 0_u32
     buffers = (0...count).map do |index|
       buffer = reset_buffer
@@ -110,6 +121,7 @@ class V4L2::Video
   end
 
   def start_stream(buffer_type : BufferType = BufferType::VIDEO_CAPTURE)
+    return self if @streaming
     type = buffer_type.value
     ret = LibC.ioctl(@io.fd, VIDIOC_STREAMON.to_u64, pointerof(type))
     raise "stream failed to start (#{ret})" if ret < 0
@@ -117,9 +129,11 @@ class V4L2::Video
     self
   end
 
-  def raw_stream(timeout : Time::Span = 2.seconds, buffer_type : BufferType = BufferType::VIDEO_CAPTURE, & : Bytes ->)
+  def stream(timeout : Time::Span = 2.seconds, buffer_type : BufferType = BufferType::VIDEO_CAPTURE, & : Bytes ->)
     buffers = @buffers
     raise "must allocate buffers" unless buffers
+
+    start_stream(buffer_type) unless @streaming
 
     while @streaming && !@io.closed?
       @io.wait_readable timeout
