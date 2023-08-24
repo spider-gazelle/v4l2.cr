@@ -81,6 +81,9 @@ v4l2-ctl --list-devices
 ffmpeg -f v4l2 -i /dev/video0 -f v4l2 /dev/video4
 # OR
 gst-launch-1.0 v4l2src device=/dev/video0 ! v4l2sink device=/dev/video4
+
+# we can specify the format and resolution to forward
+ffmpeg -f v4l2 -input_format yuyv422 -video_size 1280x720 -i /dev/video0 -c:v copy -f v4l2 /dev/video4
 ```
 
 ## Development

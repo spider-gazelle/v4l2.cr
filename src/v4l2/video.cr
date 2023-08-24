@@ -164,6 +164,7 @@ class V4L2::Video
   end
 
   def stop_stream(buffer_type : BufferType = BufferType::VIDEO_CAPTURE)
+    return self unless @streaming
     type = buffer_type.value
     ret = LibC.ioctl(@io.fd, VIDIOC_STREAMOFF.to_u64, pointerof(type))
     raise "stream failed to stop (#{ret})" if ret < 0
