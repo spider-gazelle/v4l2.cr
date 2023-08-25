@@ -2,36 +2,39 @@ require "./spec_helper"
 
 module V4L2
   describe V4L2 do
-    it "loads the library and runs some functions" do
-      LibV4l2::CreateBuffers.new
-      vid = Video.new(Path["/dev/video0"])
-      pixels = vid.supported_formats
-      pixels.each(&.frame_sizes.each(&.frame_rate))
-      pp! pixels
+    it "can inspect the device name" do
+      vid = Video.new(LOOPBACK_DEVICE)
+      details = vid.device_details
+      (details.name.size > 0).should be_true
+      details.name.should eq "Dummy video device (0x0000)"
+    end
+
+    it "can inspect the stream details" do
+      vid = Video.new(LOOPBACK_DEVICE)
+      format = vid.supported_formats[0]
+      format.code.should eq "YUYV"
+      format.description.should eq "YUYV 4:2:2"
+      size = format.frame_sizes[0]
+      size.width.should eq 640
+      size.height.should eq 360
+      size.frame_rate.fps.should eq 30
     end
 
     it "resets the buffer properly" do
-      vid = Video.new(Path["/dev/video0"])
+      vid = Video.new(LOOPBACK_DEVICE)
       vid.buffer.index = 3_u32
       vid.buffer.index.should eq 3_u32
       vid.reset_buffer
       vid.buffer.index.should eq 0_u32
     end
 
-    it "gets the device name" do
-      vid = Video.new(Path["/dev/video0"])
-      details = vid.device_details
-      (details.name.size > 0).should be_true
-    end
-
     it "can stream and scale" do
-      vid = Video.new(Path["/dev/video0"])
+      vid = Video.new(LOOPBACK_DEVICE)
       pixels = vid.supported_formats
-      pixels.each(&.frame_sizes.each(&.frame_rate))
 
-      # highest resolution + framerate combo
-      format = pixels[1].frame_sizes[1].frame_rate
-      vid.set_format(format).request_buffers(1)
+      # grab the first available
+      format = pixels[0].frame_sizes[0].frame_rate
+      vid.set_format(format).request_buffers(2)
 
       # setup the ffmpeg image format conversion
       # v4l2_frame = FFmpeg::Frame.new(format.width, format.height, :yuyv422)
@@ -56,7 +59,7 @@ module V4L2
         convert.scale(v4l2_frame, rgb_frame)
       end
 
-      (count > 0).should eq true
+      (count > 1).should eq true
 
       # save the last frame using stumpy png
       pixel_components = format.width * format.height * 3
@@ -72,6 +75,8 @@ module V4L2
         canvas.pixels[index] = StumpyCore::RGBA.new(r, g, b)
       end
       StumpyPNG.write(canvas, "./captured_frame.png")
+
+      File.exists?("./captured_frame.png").should eq true
     end
   end
 end

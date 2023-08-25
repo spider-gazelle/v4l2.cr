@@ -190,12 +190,13 @@ class V4L2::Video
     close
   end
 
-  def self.find_loopback_device : String?
+  def self.find_loopback_device : Path?
     Dir.glob("/dev/video*").each do |dev_path|
       begin
-        video = V4L2::Video.new(dev_path)
+        path = Path[dev_path]
+        video = V4L2::Video.new(path)
         begin
-          return dev_path if video.device_details.card.downcase.includes?("dummy")
+          return path if video.device_details.card.downcase.includes?("dummy")
         ensure
           video.close
         end
