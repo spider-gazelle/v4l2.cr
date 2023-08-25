@@ -6,7 +6,7 @@ class V4L2::Video
   def initialize(file : Path)
     # open file for write+read
     fd = LibC.open(file.to_s, LibC::O_RDWR)
-    raise "error opening device: #{file} (#{fd})" if fd < 0
+    raise RuntimeError.from_errno("error opening device: #{file} (#{fd})") if fd < 0
     @io = IO::FileDescriptor.new(fd)
   end
 
@@ -54,7 +54,7 @@ class V4L2::Video
     ret = LibC.ioctl(@io.fd, VIDIOC_S_FMT.to_u64, pointerof(fmt))
     if ret < 0
       code = PixelFormat.pixel_format_chars(format_id)
-      raise "failed to set video format: #{code} #{width}x#{height} (#{ret})"
+      raise RuntimeError.from_errno("failed to set video format: #{code} #{width}x#{height} (#{ret})")
     end
     self
   end
@@ -80,7 +80,7 @@ class V4L2::Video
 
     ret = LibC.ioctl(@io.fd, VIDIOC_REQBUFS.to_u64, pointerof(req_buff))
     if ret < 0
-      raise "failed to request buffers #{count}, #{buffer_type}, #{memory_type} (#{ret})"
+      raise RuntimeError.from_errno("failed to request buffers #{count}, #{buffer_type}, #{memory_type} (#{ret})")
     end
 
     case memory_type
@@ -103,13 +103,13 @@ class V4L2::Video
       buffer.index = index
 
       ret = LibC.ioctl(@io.fd, VIDIOC_QUERYBUF.to_u64, pointerof(buffer))
-      raise RuntimeError.from_errno "failed to query buffer #{index} (#{ret})" if ret < 0
+      raise RuntimeError.from_errno("failed to query buffer #{index} (#{ret})") if ret < 0
 
       pointer = LibC.mmap(nil, buffer.length, LibC::PROT_READ | LibC::PROT_WRITE, LibC::MAP_SHARED, @io.fd, buffer.m.offset)
       raise "Cannot allocate new video buffer" if pointer == LibC::MAP_FAILED
 
       ret = LibC.ioctl(@io.fd, VIDIOC_QBUF.to_u64, pointerof(buffer))
-      raise "failed to queue buffer #{index} (#{ret})" if ret < 0
+      raise RuntimeError.from_errno("failed to queue buffer #{index} (#{ret})") if ret < 0
 
       length = buffer.length
       pointer
@@ -124,7 +124,7 @@ class V4L2::Video
     return self if @streaming
     type = buffer_type.value
     ret = LibC.ioctl(@io.fd, VIDIOC_STREAMON.to_u64, pointerof(type))
-    raise "stream failed to start (#{ret})" if ret < 0
+    raise RuntimeError.from_errno("stream failed to start (#{ret})") if ret < 0
     @streaming = true
     self
   end
@@ -178,11 +178,31 @@ class V4L2::Video
     end
   end
 
-  def finalize
+  def close
     if buffers = @buffers
       stop_stream
       cleanup_buffers(buffers, @buffer_length)
     end
     @io.close
+  end
+
+  def finalize
+    close
+  end
+
+  def self.find_loopback_device : String?
+    Dir.glob("/dev/video*").each do |dev_path|
+      begin
+        video = V4L2::Video.new(dev_path)
+        begin
+          return dev_path if video.device_details.card.downcase.includes?("dummy")
+        ensure
+          video.close
+        end
+      rescue error
+        Log.warn { "unable to check device #{dev_path} (#{error.message})" }
+      end
+    end
+    nil
   end
 end
