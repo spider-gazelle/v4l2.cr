@@ -190,20 +190,20 @@ class V4L2::Video
     close
   end
 
-  def self.find_loopback_device : Path?
-    Dir.glob("/dev/video*").each do |dev_path|
+  def self.enumerate_loopback_devices : Array(Path)
+    Dir.glob("/dev/video*").compact_map do |dev_path|
       begin
-        path = Path[dev_path]
+        path = ::Path[dev_path]
         video = V4L2::Video.new(path)
         begin
-          return path if video.device_details.card.downcase.includes?("dummy")
+          next path if video.device_details.card.downcase.includes?("dummy")
         ensure
           video.close
         end
+        nil
       rescue error
         Log.warn { "unable to check device #{dev_path} (#{error.message})" }
       end
     end
-    nil
   end
 end

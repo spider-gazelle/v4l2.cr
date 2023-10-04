@@ -15,9 +15,9 @@ unless File.exists? video_file
 end
 
 # ensure we have a loopback device
-loopback = V4L2::Video.find_loopback_device
+loopback = V4L2::Video.enumerate_loopback_devices.first?
 raise "no loopback running. run 'sudo modprobe v4l2loopback'" unless loopback
-LOOPBACK_DEVICE = V4L2::Video.find_loopback_device.as(Path)
+LOOPBACK_DEVICE = V4L2::Video.enumerate_loopback_devices.first?.as(Path)
 
 # push a video to the loopback device for
 wait_running = Channel(Process).new
