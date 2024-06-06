@@ -8,8 +8,10 @@ class V4L2::Video
     fd = LibC.open(file.to_s, LibC::O_RDWR)
     raise RuntimeError.from_errno("error opening device: #{file} (#{fd})") if fd < 0
     @io = IO::FileDescriptor.new(fd)
+    @device = file
   end
 
+  getter device : Path
   getter? streaming : Bool = false
   getter buffer : LibV4l2::Buffer = LibV4l2::Buffer.new
   getter buffers : Array(Pointer(Void))? = nil
@@ -40,7 +42,7 @@ class V4L2::Video
   def device_details
     capability = LibV4l2::Capability.new
     ret = LibC.ioctl(@io.fd, VIDIOC_QUERYCAP.to_u64, pointerof(capability))
-    raise RuntimeError.from_errno "failed to obtain device details (#{ret})" if ret < 0
+    raise RuntimeError.from_errno "failed to obtain device details (#{ret}) on #{device}" if ret < 0
     DeviceDetails.new(capability)
   end
 
@@ -54,7 +56,7 @@ class V4L2::Video
     ret = LibC.ioctl(@io.fd, VIDIOC_S_FMT.to_u64, pointerof(fmt))
     if ret < 0
       code = PixelFormat.pixel_format_chars(format_id)
-      raise RuntimeError.from_errno("failed to set video format: #{code} #{width}x#{height} (#{ret})")
+      raise RuntimeError.from_errno("failed to set video format: #{code} #{width}x#{height} (#{ret}) on #{device}")
     end
     self
   end
@@ -80,7 +82,7 @@ class V4L2::Video
 
     ret = LibC.ioctl(@io.fd, VIDIOC_REQBUFS.to_u64, pointerof(req_buff))
     if ret < 0
-      raise RuntimeError.from_errno("failed to request buffers #{count}, #{buffer_type}, #{memory_type} (#{ret})")
+      raise RuntimeError.from_errno("failed to request buffers #{count}, #{buffer_type}, #{memory_type} (#{ret}) on #{device}")
     end
 
     case memory_type
@@ -103,13 +105,13 @@ class V4L2::Video
       buffer.index = index
 
       ret = LibC.ioctl(@io.fd, VIDIOC_QUERYBUF.to_u64, pointerof(buffer))
-      raise RuntimeError.from_errno("failed to query buffer #{index} (#{ret})") if ret < 0
+      raise RuntimeError.from_errno("failed to query buffer #{index} (#{ret}) on #{device}") if ret < 0
 
       pointer = LibC.mmap(nil, buffer.length, LibC::PROT_READ | LibC::PROT_WRITE, LibC::MAP_SHARED, @io.fd, buffer.m.offset)
-      raise "Cannot allocate new video buffer" if pointer == LibC::MAP_FAILED
+      raise "Cannot allocate new video buffer for #{device}" if pointer == LibC::MAP_FAILED
 
       ret = LibC.ioctl(@io.fd, VIDIOC_QBUF.to_u64, pointerof(buffer))
-      raise RuntimeError.from_errno("failed to queue buffer #{index} (#{ret})") if ret < 0
+      raise RuntimeError.from_errno("failed to queue buffer #{index} (#{ret}) on #{device}") if ret < 0
 
       length = buffer.length
       pointer
@@ -124,7 +126,7 @@ class V4L2::Video
     return self if @streaming
     type = buffer_type.value
     ret = LibC.ioctl(@io.fd, VIDIOC_STREAMON.to_u64, pointerof(type))
-    raise RuntimeError.from_errno("stream failed to start (#{ret})") if ret < 0
+    raise RuntimeError.from_errno("stream failed to start (#{ret}) on #{device}") if ret < 0
     @streaming = true
     self
   end
@@ -144,7 +146,7 @@ class V4L2::Video
 
       ret = LibC.ioctl(@io.fd, VIDIOC_DQBUF.to_u64, pointerof(buffer))
       if ret < 0
-        raise "failed to dequeue buffer (#{ret})"
+        raise "failed to dequeue buffer (#{ret}) on #{device}"
       end
 
       pointer = Pointer(UInt8).new(buffers[buffer.index].address)
@@ -153,7 +155,7 @@ class V4L2::Video
 
       ret = LibC.ioctl(@io.fd, VIDIOC_QBUF.to_u64, pointerof(buffer))
       if ret < 0
-        raise "failed to queue buffer #{buffer.index} (#{ret})"
+        raise "failed to queue buffer #{buffer.index} (#{ret}) on #{device}"
       end
     end
   rescue error
@@ -167,7 +169,7 @@ class V4L2::Video
     return self unless @streaming
     type = buffer_type.value
     ret = LibC.ioctl(@io.fd, VIDIOC_STREAMOFF.to_u64, pointerof(type))
-    raise "stream failed to stop (#{ret})" if ret < 0
+    raise "stream failed to stop (#{ret}) on #{device}" if ret < 0
     @streaming = false
     self
   end
